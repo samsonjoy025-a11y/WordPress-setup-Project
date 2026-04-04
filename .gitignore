@@ -1,4 +1,11 @@
-wp-config.php
-wp-content/uploads/
-wp-content/cache/
+# Ignore WordPress config and sensitive files
+/srv/www/wordpress/wp-config.php
 *.log
+
+# Vagrant temporary files
+.vagrant/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
