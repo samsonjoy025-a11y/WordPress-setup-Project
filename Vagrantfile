@@ -32,7 +32,7 @@ Vagrant.configure("2") do |config|
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
-   config.vm.network "private_network", ip: "192.168.56.26"
+   config.vm.network "private_network", ip: "192.168.56.30"
 
   # Create a public network, which generally matched to bridged network.
   # Bridged networks make the machine appear as another physical device on
@@ -72,8 +72,98 @@ Vagrant.configure("2") do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Ansible, Chef, Docker, Puppet and Salt are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  # config.vm.provision "shell", inline: <<-SHELL
-  #   apt-get update
-  #   apt-get install -y apache2
-  # SHELL
+  config.vm.provision "shell", inline: <<-SHELL
+    #!/bin/bash
+# =========================================
+# Automated WordPress Provisioning Script
+# =========================================
+
+# 1️⃣ Update system and install required packages
+sudo apt update -y
+sudo apt install -y apache2 \
+    ghostscript \
+    libapache2-mod-php \
+    mysql-server \
+    php \
+    php-bcmath \
+    php-curl \
+    php-imagick \
+    php-intl \
+    php-json \
+    php-mbstring \
+    php-mysql \
+    php-xml \
+    php-zip \
+    curl \
+    unzip
+
+# 2️⃣ Create web directory and set permissions
+sudo mkdir -p /srv/www
+sudo chown www-data:www-data /srv/www
+sudo chmod 755 /srv/www
+
+# 3️⃣ Download and extract WordPress
+curl -s https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www
+
+# 4️⃣ Apache VirtualHost configuration
+cat > /etc/apache2/sites-available/wordpress.conf <<EOF
+<VirtualHost *:80>
+    ServerAdmin admin@localhost
+    DocumentRoot /srv/www/wordpress
+
+    <Directory /srv/www/wordpress>
+        Options FollowSymLinks
+        AllowOverride All
+        DirectoryIndex index.php
+        Require all granted
+    </Directory>
+
+    <Directory /srv/www/wordpress/wp-content>
+        Options FollowSymLinks
+        Require all granted
+    </Directory>
+
+    ErrorLog \${APACHE_LOG_DIR}/wordpress_error.log
+    CustomLog \${APACHE_LOG_DIR}/wordpress_access.log combined
+</VirtualHost>
+EOF
+
+# Enable site & rewrite module, disable default site
+sudo a2ensite wordpress
+sudo a2enmod rewrite
+sudo a2dissite 000-default
+sudo systemctl reload apache2
+
+# 5️⃣ MySQL setup
+# Ensure MySQL root can run commands without password (or adjust accordingly)
+sudo mysql -e "CREATE DATABASE wordpress;"
+sudo mysql -e "CREATE USER 'wordpress'@'localhost' IDENTIFIED BY 'admin123';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+# 6️⃣ Configure wp-config.php
+sudo -u www-data cp /srv/www/wordpress/wp-config-sample.php /srv/www/wordpress/wp-config.php
+
+# Set database info
+sudo -u www-data sed -i 's/database_name_here/wordpress/' /srv/www/wordpress/wp-config.php
+sudo -u www-data sed -i 's/username_here/wordpress/' /srv/www/wordpress/wp-config.php
+sudo -u www-data sed -i 's/password_here/admin123/' /srv/www/wordpress/wp-config.php
+
+# Add secure authentication keys & salts
+curl -s https://api.wordpress.org/secret-key/1.1/salt/ | sudo tee -a /srv/www/wordpress/wp-config.php
+
+# 7️⃣ Set ownership and permissions
+sudo chown -R www-data:www-data /srv/www/wordpress
+sudo find /srv/www/wordpress/ -type d -exec chmod 755 {} \;
+sudo find /srv/www/wordpress/ -type f -exec chmod 644 {} \;
+
+# 8️⃣ Restart services
+sudo systemctl restart apache2
+sudo systemctl restart mysql
+
+echo "✅ WordPress provisioning complete! Visit your server IP to finish setup."
+
+
+
+   SHELL
 end
